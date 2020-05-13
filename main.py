@@ -2,15 +2,16 @@ import os
 import numpy as np
 import random as rand
 import functions
+import test_func
 from scipy.optimize import curve_fit
 import matplotlib.pyplot as plt
-
+import copy
 
 
 MAX_LENGTH = 5
 MAX_POLY_LENGTH = 5
 func_zoo = ["polynomial", "exponential", "logarithm", "add_exponential", "add_logarithm","add_polynomial", "inverse"]
-
+MAX_COUNT = 500
 class MathModel:
 
     def __init__(self, model_length, init_poly=False, poly_num = None, init_log = False, init_exp = False, func_list = None):
@@ -20,6 +21,7 @@ class MathModel:
 
         if func_list == None:
             if init_poly:
+                assert poly_num <= MAX_POLY_LENGTH
                 self.func_list = self.init_function(poly = True,polynum = poly_num)
             elif init_log:
                 self.func_list = self.init_function(log = True)
@@ -28,6 +30,7 @@ class MathModel:
             else:
                 self.func_list = self.construct_list()
         else:
+            assert model_length == len(func_list)
             self.func_list = func_list
 
         self.generate_model()
@@ -35,7 +38,10 @@ class MathModel:
     def __eq__(self, other):
         if self.model_length != other.model_length:
             return False
-
+        #print(self.model_length)
+        #print(other.model_length)
+        #print(self.func_list)
+        #print(other.func_list)
         for i in range(self.model_length):
             if self.func_list[i] != other.func_list[i]:
                 return False
@@ -80,7 +86,9 @@ class MathModel:
         for func in self.func_list:
             if func.startswith("polynomial") or func.startswith("add_polynomial"):
                 length = int(func[-1])
+                #print(func)
                 func = func[:-1]
+                #print(func)
                 mathmodel = getattr(functions,func)
                 model = mathmodel(model, paramcount, length)
                 paramcount += length
@@ -142,6 +150,7 @@ class MathModel:
         self.replace_parameter()
         print(self.model_strings)
         print("MSE: ", self.error)
+        return self.model_strings, self.error
 
 
     def replace_parameter(self):
@@ -152,7 +161,7 @@ class MathModel:
 
     def fit(self, x, y):
         try:
-            for i in range(5):
+            for i in range(3):
                 fittedParams, pcov = curve_fit(self.model, x, y, np.ones(self.paramcount),maxfev = 10000)
                 modelPrediction = self.model(x, *fittedParams)
                 absError = np.abs(modelPrediction - y)
@@ -198,15 +207,19 @@ def findMaxPower(x, y):
         if xdiff < 1:
             if ydiff < 1:
                 if ydiff > xdiff**i:
+                    if i > MAX_POLY_LENGTH:
+                        return MAX_POLY_LENGTH
                     return i
             else:
-                return 5
+                return MAX_POLY_LENGTH
         #add small momentum
         if xdiff == 1:
             xdiff += 0.1
         if ydiff < xdiff**i:
+            if i > MAX_POLY_LENGTH:
+                return MAX_POLY_LENGTH
             return i
-    return 100
+    return MAX_POLY_LENGTH
 
 
 def construct_params(length):
@@ -240,9 +253,15 @@ class synthesizer:
 
 
         self.model_population.sort()
+
+        search_count = 0
         while self.model_population[0].error > self.errorbound:
             self.genetic()
             self.model_population.sort()
+            search_count += 1
+            print(search_count)
+            if search_count >= MAX_COUNT:
+                break
 
 
         self.model = self.model_population[0]
@@ -251,12 +270,15 @@ class synthesizer:
 
     def genetic(self):
         length = len(self.model_population)
-        for i in range(length//2):
-            self.model_population.pop()
+        if length > 3:
+            for i in range(length - 3):
+                self.model_population.pop()
 
         new_length = len(self.model_population)
         for i in range(new_length):
             for j in np.arange(i+1, new_length):
+                if self.model_population[i].model_length < 2 or self.model_population[j].model_length < 2:
+                    continue
                 new_model1, new_model2 = self.cross(i, j)
 
                 if new_model1 not in self.model_population:
@@ -275,37 +297,44 @@ class synthesizer:
 
 
     def mutate(self, i):
-        old_model = self.model_population[i]
+        old_model = copy.deepcopy(self.model_population[i])
+        model_length = old_model.model_length
         old_funcs = old_model.func_list
-        if old_model.model_length < MAX_LENGTH:
-            mutate_type = ["add", "minus", "change"]
-        elif old_model.model_lenth <=2:
+        if model_length <=2:
             mutate_type = ["add", "change"]
+        elif model_length < MAX_LENGTH:
+            mutate_type = ["add", "minus", "change"]
         else:
             mutate_type = ["minus", "change"]
 
         cur_type = mutate_type[rand.randint(0, len(mutate_type)-1)]
         if cur_type == "add":
-            ins_pos = rand.randint(1,self.model_length)
+            ins_pos = rand.randint(1, model_length)
             ins_function = func_zoo[rand.randint(0,6)]
+            if ins_function == "polynomial" or ins_function == "add_polynomial":
+                poly_length = rand.randint(1, MAX_POLY_LENGTH)
+                ins_function += str(poly_length)
             old_funcs.insert(ins_pos, ins_function)
         elif cur_type == "minus":
-            rem_pos = rand.randint(1,self.model_length-1)
-            old_funcs.pop(ins_pos, ins_function)
+            rem_pos = rand.randint(1, model_length-1)
+            old_funcs.pop(rem_pos)
         else:
-            ch_pos = rand.randint(0,self.model_length-1)
+            ch_pos = rand.randint(0, model_length-1)
             if ch_pos == 0:
                 ch_function = func_zoo[rand.randint(0,2)]
             else:
                 ch_function = func_zoo[rand.randint(0,6)]
+            if ch_function == "polynomial" or ch_function == "add_polynomial":
+                poly_length = rand.randint(1, MAX_POLY_LENGTH)
+                ch_function += str(poly_length)
             old_funcs[ch_pos] = ch_function
 
         new_model = MathModel(model_length = len(old_funcs), func_list = old_funcs)
         return new_model
 
     def cross(self, i, j):
-        first_model = self.model_population[i]
-        second_model = self.model_population[j]
+        first_model = copy.deepcopy(self.model_population[i])
+        second_model = copy.deepcopy(self.model_population[j])
         first_funcs = first_model.func_list
         first_length = len(first_funcs)
         second_funcs = second_model.func_list
@@ -345,7 +374,7 @@ class synthesizer:
     def search_linear(self):
         power=findMaxPower(self.input,self.output)
         for i in np.arange(power,0, -1):
-            model = MathModel(1, init_poly=True, poly_num=power+1)
+            model = MathModel(1, init_poly=True, poly_num=power)
             error = model.fit(self.input, self.output)
             if (error <= self.errorbound):
                 self.error = error
@@ -363,23 +392,30 @@ class synthesizer:
 
 
 
-def test_func(x):
-    return np.log(5*x+3) + 2*x +4
 
-def generate_data(n):
+def generate_data(n, test_func):
     x = []
     y = []
     for i in range(n):
         newx = rand.random()*rand.randint(0,50)
+        newy = test_func(newx)+ np.random.normal(0,0.2,1)[0]
+        if (np.isinf(newy)):
+            continue
         x.append(newx)
-        y.append(test_func(newx))
-                #+ np.random.normal(0,0.5,1)[0])
+        y.append(newy)
 
     return np.array(x), np.array(y)
 
-def main():
+def plot(test_func, index):
+    test_string = "test_func" + str(index)
     rand.seed(1825)
-    x, y=generate_data(200)
+    x, y=generate_data(200, test_func)
+    with open(test_string + "_x", "w") as f:
+        for item in x:
+            f.write("%s\n" % item)
+    with open(test_string + "_y", "w") as f:
+        for item in y:
+            f.write("%s\n" % item)
     x = np.repeat(x,200)
     y = np.repeat(y, 200)
     #model = MathModel(1)
@@ -388,9 +424,13 @@ def main():
     #mse = model.fit(x,y)
     #print(mse)
     #print(model.params)
-    syns = synthesizer(x, y, 0.1)
+    syns = synthesizer(x, y, 0.5)
     syns.search()
-    syns.model.print_function()
+    model_string, error = syns.model.print_function()
+    with open("output.txt", "a+") as f:
+        f.write(model_string)
+        f.write("\n")
+        f.write("error: " + str(error) + "\n")
     f = plt.figure()
     axes = f.add_subplot(111)
 
@@ -409,8 +449,13 @@ def main():
     axes.set_xlabel('X Data')
     axes.set_ylabel('Y Data')
 
-    plt.savefig("demo.png")
+    plt.savefig(test_string+".png")
     plt.close('all')
+
+def main():
+    for i in range(8):
+        tests = getattr(test_func, "test_func"+str(i+1))
+        plot(tests, i+1)
 
 
 if __name__ == "__main__":
