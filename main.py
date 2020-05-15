@@ -3,7 +3,9 @@ import numpy as np
 import random as rand
 import functions
 import test_func
-from scipy.optimize import curve_fit
+#from scipy.optimize import curve_fit
+import torch
+from fit import fit
 import matplotlib.pyplot as plt
 import copy
 
@@ -11,7 +13,7 @@ import copy
 MAX_LENGTH = 5
 MAX_POLY_LENGTH = 5
 func_zoo = ["polynomial", "exponential", "logarithm", "add_exponential", "add_logarithm","add_polynomial", "inverse"]
-MAX_COUNT = 500
+MAX_COUNT = 5
 class MathModel:
 
     def __init__(self, model_length, init_poly=False, poly_num = None, init_log = False, init_exp = False, func_list = None):
@@ -159,29 +161,25 @@ class MathModel:
 
 
 
-    def fit(self, x, y):
-        try:
-            for i in range(3):
-                fittedParams, pcov = curve_fit(self.model, x, y, np.ones(self.paramcount),maxfev = 10000)
-                modelPrediction = self.model(x, *fittedParams)
-                absError = np.abs(modelPrediction - y)
-                mse = np.mean(absError)
-                if i == 0:
-                    error = mse
-                    bestparam = fittedParams
-                if(mse < error):
-                    error = mse
-                    bestparam = fittedParams
+    def fit(self, train_x, train_y, test_x, test_y):
+        for i in range(2):
+            fittedParams, mse = fit(self.model, self.paramcount, train_x,train_y,test_x,test_y)
+            if i == 0:
+                error = mse
+                bestparam = fittedParams
+            if(mse < error):
+                error = mse
+                bestparam = fittedParams
 
-            self.params = bestparam
+        self.params = bestparam
 
-            self.error = error
+        self.error = error
 
-            return error
-        except RuntimeError:
-            self.error = np.inf
-            self.params = np.ones(self.paramcount)
-            return self.error
+        return error
+        #except RuntimeError:
+        #    self.error = np.inf
+        #    self.params = np.ones(self.paramcount)
+        #    return self.error
 
 def poly_str(length, token):
     ret_str = ""
@@ -222,38 +220,37 @@ def findMaxPower(x, y):
     return MAX_POLY_LENGTH
 
 
-def construct_params(length):
-    ret = []
-    for i in range(length):
-        ret.append("params_"+str(i))
-    return ret
 
 
 class synthesizer:
-    def __init__(self,training_input, training_output, bound):
-        self.input=training_input
-        self.output=training_output
+    def __init__(self,training_input, training_output,test_input, test_output, bound):
+        self.train_x=training_input
+        self.train_y=training_output
+        self.test_x=training_input
+        self.test_y=training_output
         self.model_population = []
         self.errorbound = bound
 
     def search(self):
         if self.search_linear():
             return
+        print("done search linear")
         if self.search_log():
             return
+        print("done search log")
         if self.search_exp():
             return
+        print("done search exp")
 
         for i in range (10):
             length = rand.randint(2, MAX_LENGTH)
             new_func = MathModel(length)
             if new_func not in self.model_population:
-                new_func.fit(self.input, self.output)
+                new_func.fit(self.train_x, self.train_y, self.test_x, self.test_y)
                 self.model_population.append(new_func)
 
 
         self.model_population.sort()
-
         search_count = 0
         while self.model_population[0].error > self.errorbound:
             self.genetic()
@@ -282,17 +279,17 @@ class synthesizer:
                 new_model1, new_model2 = self.cross(i, j)
 
                 if new_model1 not in self.model_population:
-                    new_model1.fit(self.input, self.output)
+                    new_model1.fit(self.train_x, self.train_y, self.test_x, self.test_y)
                     self.model_population.append(new_model1)
 
                 if new_model2 not in self.model_population:
-                    new_model2.fit(self.input, self.output)
+                    new_model2.fit(self.train_x, self.train_y, self.test_x, self.test_y)
                     self.model_population.append(new_model2)
 
         for i in range(new_length):
             new_model = self.mutate(i)
             if new_model not in self.model_population:
-                new_model.fit(self.input, self.output)
+                new_model.fit(self.train_x, self.train_y, self.test_x, self.test_y)
                 self.model_population.append(new_model)
 
 
@@ -353,7 +350,7 @@ class synthesizer:
 
     def search_log(self):
         model = MathModel(1, init_log=True)
-        error = model.fit(self.input, self.output)
+        error = model.fit(self.train_x, self.train_y, self.test_x, self.test_y)
         if (error <= self.errorbound):
             self.error = error
             self.model = model
@@ -363,7 +360,7 @@ class synthesizer:
 
     def search_exp(self):
         model = MathModel(1, init_exp=True)
-        error = model.fit(self.input, self.output)
+        error = model.fit(self.train_x, self.train_y, self.test_x, self.test_y)
         if (error <= self.errorbound):
             self.error = error
             self.model = model
@@ -372,23 +369,16 @@ class synthesizer:
 
 
     def search_linear(self):
-        power=findMaxPower(self.input,self.output)
+        power=findMaxPower(self.train_x, self.train_y)
         for i in np.arange(power,0, -1):
             model = MathModel(1, init_poly=True, poly_num=power)
-            error = model.fit(self.input, self.output)
+            error = model.fit(self.train_x, self.train_y, self.test_x, self.test_y)
             if (error <= self.errorbound):
                 self.error = error
                 self.model = model
                 return True
         return False
 
-
-    def clean_params(self):
-        for i in range(self.paramscount):
-            if np.abs(self.paramsvals[i]) < 10**(-4):
-                self.paramsvals[i]=0
-            if np.abs(round(self.paramsvals[i]) - self.paramsvals[i]) < 10**(-5):
-                self.paramsvals[i] = round(self.paramsvals[i])
 
 
 
@@ -397,7 +387,7 @@ def generate_data(n, test_func):
     x = []
     y = []
     for i in range(n):
-        newx = rand.random()*rand.randint(0,50)
+        newx = rand.random()*rand.randint(0,3)
         newy = test_func(newx)+ np.random.normal(0,0.2,1)[0]
         if (np.isinf(newy)):
             continue
@@ -409,22 +399,34 @@ def generate_data(n, test_func):
 def plot(test_func, index):
     test_string = "test_func" + str(index)
     rand.seed(1825)
-    x, y=generate_data(200, test_func)
-    with open(test_string + "_x", "w") as f:
-        for item in x:
+    train_x, train_y=generate_data(300, test_func)
+    test_x, test_y=generate_data(200, test_func)
+    #train_x = torch.from_numpy(train_x)
+    #train_y = torch.from_numpy(train_y)
+    #test_x = torch.from_numpy(test_x)
+    #test_y = torch.from_numpy(test_y)
+    with open(test_string + "_train_x", "w") as f:
+        for item in train_x:
             f.write("%s\n" % item)
-    with open(test_string + "_y", "w") as f:
-        for item in y:
+    with open(test_string + "_train_y", "w") as f:
+        for item in train_y:
             f.write("%s\n" % item)
-    x = np.repeat(x,200)
-    y = np.repeat(y, 200)
+
+    with open(test_string + "_test_x", "w") as f:
+        for item in test_x:
+            f.write("%s\n" % item)
+    with open(test_string + "_test_y", "w") as f:
+        for item in test_y:
+            f.write("%s\n" % item)
+
+
     #model = MathModel(1)
     #print(model.paramcount)
     #print(model.func_list)
     #mse = model.fit(x,y)
     #print(mse)
     #print(model.params)
-    syns = synthesizer(x, y, 0.5)
+    syns = synthesizer(train_x, train_y, test_x, test_y, 0.5)
     syns.search()
     model_string, error = syns.model.print_function()
     with open("output.txt", "a+") as f:
@@ -434,9 +436,9 @@ def plot(test_func, index):
     f = plt.figure()
     axes = f.add_subplot(111)
 
-    axes.plot(x, y, 'D', color = "green", label = "Data")
+    axes.plot(train_x, train_y, 'D', color = "green", label = "Data")
 
-    xModel = np.linspace(min(x), max(x))
+    xModel = np.linspace(min(train_x), max(train_x))
     yModel = syns.model.model(xModel, *syns.model.params)
     realY = test_func(xModel)
 

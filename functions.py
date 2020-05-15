@@ -1,4 +1,5 @@
 import os
+import torch
 import numpy as np
 import math
 
@@ -27,7 +28,7 @@ def polynomial(model, length, new_length):
             ret = 0
             m = len(args)
             for i in range(m):
-                ret += args[i] * np.power(x, (m-i-1))
+                ret += args[i] * x.pow(m-i-1)
             return ret
     else:
         def poly(x, *args):
@@ -37,7 +38,7 @@ def polynomial(model, length, new_length):
             m = len(cur_args)
             new_input = model(x, *model_args)
             for i in range(m):
-                ret += cur_args[i] * np.power(new_input, (m-i-1))
+                ret += cur_args[i] * new_input.pow(m-i-1)
             return ret
 
     return poly
@@ -48,13 +49,13 @@ def exponential(model, length, new_length):
     args = construct_params(length+new_length)
     if model == None:
         def exp(x, *args):
-            return args[0]*np.exp(args[1]*x+args[2])
+            return args[0]*torch.exp(args[1]*x+args[2])
     else:
         def exp(x, *args):
             model_args = args[:length]
             cur_args = args[-new_length:]
             new_input = model(x, *model_args)
-            return cur_args[0]*np.exp(cur_args[1]*new_input+cur_args[2])
+            return cur_args[0]*torch.exp(cur_args[1]*new_input+cur_args[2])
 
     return exp
 
@@ -63,13 +64,13 @@ def logarithm(model, length, new_length):
     args = construct_params(length+new_length)
     if model == None:
         def log(x, *args):
-            return args[0] * np.log(args[1] * x + args[2])
+            return args[0] * torch.log(args[1] * x + args[2])
     else:
         def log(x, *args):
             model_args = args[:length]
             cur_args = args[-new_length:]
             new_input = model(x, *model_args)
-            return cur_args[0] * np.log(cur_args[1] * new_input + cur_args[2])
+            return cur_args[0] * torch.log(cur_args[1] * new_input + cur_args[2])
 
     return log
 
@@ -80,7 +81,7 @@ def add_exponential(model, length, new_length):
         model_args = args[:length]
         cur_args = args[-new_length:]
         new_input = model(x, *model_args)
-        return new_input + cur_args[0] * np.exp(cur_args[1] * x + cur_args[2])
+        return new_input + cur_args[0] * torch.exp(cur_args[1] * x + cur_args[2])
     return func
 
 
@@ -90,7 +91,7 @@ def add_logarithm(model, length, new_length):
         model_args = args[:length]
         cur_args = args[-new_length:]
         new_input = model(x, *model_args)
-        return new_input + cur_args[0] * np.log(cur_args[1] * x + cur_args[2])
+        return new_input + cur_args[0] * torch.log(cur_args[1] * x + cur_args[2])
 
     return func
 
@@ -103,8 +104,8 @@ def add_polynomial(model, length, new_length):
         m = len(cur_args)
         new_input = model(x, *model_args)
         for i in range(m):
-            ret += cur_args[i] * pow(x, (m-i-1))
-        return new_input + ret 
+            ret += cur_args[i] * x.pow(m-i-1)
+        return new_input + ret
 
     return func
 
