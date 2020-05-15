@@ -10,7 +10,7 @@ def fit(test_func, length, train_x, train_y, test_x, test_y):
 
     allparams = construct_params(length)
 
-
+    device = torch.device("cuda:0" if torch.cuda.is_available() else "cpu")
     class Solver(nn.Module):
         def __init__(self):
             super().__init__()
@@ -26,19 +26,27 @@ def fit(test_func, length, train_x, train_y, test_x, test_y):
 
     train_x = torch.from_numpy(train_x)
     train_y = torch.from_numpy(train_y)
+    train_x = train_x.to(device)
+    train_y = train_y.to(device)
+    #print(train_x.device)
+    #print(train_y.device)
     train_dataset = data.TensorDataset(train_x, train_y)
     train_loader = data.DataLoader(train_dataset, batch_size = 16, shuffle = True)
+    #train_loader.to(device)
     #print(train_X)
     #print(train_Y)
 
 
-    test_x = torch.from_numpy(test_x)
-    test_y = torch.from_numpy(test_y)
+    test_x = torch.from_numpy(test_x).to(device)
+    test_y = torch.from_numpy(test_y).to(device)
+    #test_x.to(device)
+    #test_y.to(device)
     #test_dataset = data.TensorDataset(test_x, test_y)
     #test_loader = data.DataLoader(test_dataset, batch_size = 16, shuffle = True)
 
 
     model = Solver()
+    model.to(device)
     opt = optim.Adam(model.parameters(), lr=0.1)
     loss_fn = nn.MSELoss()
 
@@ -54,11 +62,12 @@ def fit(test_func, length, train_x, train_y, test_x, test_y):
         for inp, out in train_loader:
             opt.zero_grad()
             pred_out = model(inp)
-            #print(pred_out)
             loss = loss_fn(pred_out, out)
             loss.backward()
             opt.step()
-        #print(f'Epoch: {epoch}, Loss: {loss}')
+        if torch.isnan(loss) or loss.item() < 1e-2:
+           break
+        print(f'Epoch: {epoch}, Loss: {loss}')
 
     model.eval()
     y_pred = model(test_x)

@@ -2,7 +2,7 @@ import os
 import torch
 import numpy as np
 import math
-
+from utils import construct_params
 
 #def polynomial(*args):
 #    ret_str = ""
@@ -120,10 +120,5 @@ def inverse(model, length, new_length):
     return func
 
 
-def construct_params(length):
-    ret = []
-    for i in range(length):
-        ret.append("params_"+str(i))
-    return ret
 
 
