@@ -67,7 +67,7 @@ def fit(test_func, length, train_x, train_y, test_x, test_y):
             opt.step()
         if torch.isnan(loss) or loss.item() < 1e-2:
            break
-        print(f'Epoch: {epoch}, Loss: {loss}')
+        #print(f'Epoch: {epoch}, Loss: {loss}')
 
     model.eval()
     y_pred = model(test_x)
