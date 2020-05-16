@@ -14,7 +14,7 @@ import copy
 MAX_LENGTH = 5
 MAX_POLY_LENGTH = 5
 func_zoo = ["polynomial", "exponential", "logarithm", "add_exponential", "add_logarithm","add_polynomial", "inverse"]
-MAX_COUNT = 1
+MAX_COUNT = 100
 class MathModel:
 
     def __init__(self, model_length, init_poly=False, poly_num = None, init_log = False, init_exp = False, func_list = None):
@@ -406,17 +406,17 @@ def plot(test_func, index):
     #train_y = torch.from_numpy(train_y)
     #test_x = torch.from_numpy(test_x)
     #test_y = torch.from_numpy(test_y)
-    with open(test_string + "_train_x.txt", "w") as f:
+    with open("output/" + test_string + "_train_x.txt", "w") as f:
         for item in train_x:
             f.write("%s\n" % item)
-    with open(test_string + "_train_y.txt", "w") as f:
+    with open("output/" + test_string + "_train_y.txt", "w") as f:
         for item in train_y:
             f.write("%s\n" % item)
 
-    with open(test_string + "_test_x.txt", "w") as f:
+    with open("output/" + test_string + "_test_x.txt", "w") as f:
         for item in test_x:
             f.write("%s\n" % item)
-    with open(test_string + "_test_y.txt", "w") as f:
+    with open("output/" + test_string + "_test_y.txt", "w") as f:
         for item in test_y:
             f.write("%s\n" % item)
 
@@ -430,7 +430,7 @@ def plot(test_func, index):
     syns = synthesizer(train_x, train_y, test_x, test_y, 0.5)
     syns.search()
     model_string, error = syns.model.print_function()
-    with open("output.txt", "a+") as f:
+    with open("output/output.txt", "a+") as f:
         f.write(model_string)
         f.write("\n")
         f.write("error: " + str(error) + "\n")
@@ -457,7 +457,7 @@ def plot(test_func, index):
 
 def main():
     start_time = time.time()
-    for i in range(8):
+    for i in range(4):
         tests = getattr(test_func, "test_func"+str(i+1))
         plot(tests, i+1)
     end_time =time.time()
